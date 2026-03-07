@@ -1,7 +1,7 @@
 name: Render DJSamsi Video
 run-name: "Render: ${{ inputs.track_name }} (${{ inputs.num_workers }} workers)"
 
-on:
+"on":
   workflow_dispatch:
     inputs:
       track_name:
