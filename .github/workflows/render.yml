@@ -1,0 +1,217 @@
+name: Render DJSamsi Video
+run-name: "Render: ${{ inputs.track_name }} (${{ inputs.num_workers }} workers)"
+
+on:
+  workflow_dispatch:
+    inputs:
+      track_name:
+        description: "Track name (used for output filename)"
+        required: true
+        type: string
+      num_workers:
+        description: "Number of parallel render workers"
+        required: true
+        type: number
+        default: 10
+      props_json:
+        description: "Remotion props JSON (paste full content of render-props.json)"
+        required: true
+        type: string
+      audio_url:
+        description: "Public URL to WAV audio file (will be downloaded into public/audio/)"
+        required: false
+        type: string
+
+env:
+  COMPOSITION_ID: ExperiencePlayer
+  NUM_WORKERS: ${{ inputs.num_workers }}
+
+jobs:
+  # Step 1: Install deps and cache
+  setup:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Cache node modules
+        uses: actions/cache@v4
+        id: cache
+        with:
+          path: node_modules
+          key: ${{ runner.os }}-node-${{ hashFiles('package.json') }}
+      - name: Install dependencies
+        if: steps.cache.outputs.cache-hit != 'true'
+        run: npm install
+
+  # Step 2: Get total frames from props
+  get-frames:
+    runs-on: ubuntu-latest
+    needs: [setup]
+    outputs:
+      total_frames: ${{ steps.calc.outputs.total_frames }}
+    steps:
+      - id: calc
+        env:
+          PROPS_JSON: ${{ inputs.props_json }}
+        run: |
+          TOTAL_FRAMES=$(echo "$PROPS_JSON" | python3 -c "
+          import json, sys
+          props = json.load(sys.stdin)
+          phases = props.get('phases', [])
+          last_end = max(p['end_sec'] for p in phases) if phases else 290
+          fps = 30
+          print(int(last_end * fps))
+          ")
+          echo "total_frames=$TOTAL_FRAMES" >> $GITHUB_OUTPUT
+          echo "Total frames: $TOTAL_FRAMES"
+
+  # Step 3: Build worker matrix
+  build-matrix:
+    runs-on: ubuntu-latest
+    outputs:
+      workers: ${{ steps.matrix.outputs.workers }}
+    steps:
+      - id: matrix
+        run: |
+          workers=$(python3 -c "import json; print(json.dumps(list(range(${{ env.NUM_WORKERS }}))))")
+          echo "workers=$workers" >> $GITHUB_OUTPUT
+
+  # Step 4: Render audio track separately
+  render-audio:
+    runs-on: ubuntu-latest
+    needs: [setup]
+    steps:
+      - uses: actions/checkout@v4
+      - name: Restore node modules
+        uses: actions/cache@v4
+        with:
+          path: node_modules
+          key: ${{ runner.os }}-node-${{ hashFiles('package.json') }}
+
+      - name: Download audio and write props
+        env:
+          PROPS_JSON: ${{ inputs.props_json }}
+          AUDIO_URL: ${{ inputs.audio_url }}
+        run: |
+          mkdir -p public/audio
+          AUDIO_FILE=$(echo "$PROPS_JSON" | python3 -c "import json,sys; print(json.load(sys.stdin).get('audioFile','audio/track.wav'))")
+          if [ -n "$AUDIO_URL" ]; then
+            curl -L -o "public/$AUDIO_FILE" "$AUDIO_URL"
+            ls -lh "public/$AUDIO_FILE"
+          fi
+          echo "$PROPS_JSON" > render-props.json
+
+      - uses: FedericoCarboni/setup-ffmpeg@v3
+      - name: Render audio
+        run: npx remotion render src/index.ts ${{ env.COMPOSITION_ID }} chunks/audio.mp3 --props render-props.json
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: audio
+          path: chunks/audio.mp3
+
+  # Step 5: Parallel video rendering (muted)
+  render-chunks:
+    runs-on: ubuntu-latest
+    needs: [setup, build-matrix, get-frames]
+    strategy:
+      fail-fast: false
+      matrix:
+        worker_id: ${{ fromJson(needs.build-matrix.outputs.workers) }}
+    env:
+      TOTAL_FRAMES: ${{ needs.get-frames.outputs.total_frames }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Restore node modules
+        uses: actions/cache@v4
+        with:
+          path: node_modules
+          key: ${{ runner.os }}-node-${{ hashFiles('package.json') }}
+
+      - name: Download audio and write props
+        env:
+          PROPS_JSON: ${{ inputs.props_json }}
+          AUDIO_URL: ${{ inputs.audio_url }}
+        run: |
+          mkdir -p public/audio
+          AUDIO_FILE=$(echo "$PROPS_JSON" | python3 -c "import json,sys; print(json.load(sys.stdin).get('audioFile','audio/track.wav'))")
+          if [ -n "$AUDIO_URL" ]; then
+            curl -L -o "public/$AUDIO_FILE" "$AUDIO_URL"
+            ls -lh "public/$AUDIO_FILE"
+          fi
+          echo "$PROPS_JSON" > render-props.json
+
+      - uses: FedericoCarboni/setup-ffmpeg@v3
+
+      - name: Calculate frame range
+        run: |
+          FPW=$(( TOTAL_FRAMES / ${{ env.NUM_WORKERS }} ))
+          START=$(( ${{ matrix.worker_id }} * FPW ))
+          if [ "${{ matrix.worker_id }}" -lt "$(( ${{ env.NUM_WORKERS }} - 1 ))" ]; then
+            END=$(( START + FPW - 1 ))
+          else
+            END=$(( TOTAL_FRAMES - 1 ))
+          fi
+          echo "START_FRAME=$START" >> $GITHUB_ENV
+          echo "END_FRAME=$END" >> $GITHUB_ENV
+          echo "Rendering frames $START-$END"
+
+      - name: Render video chunk (muted)
+        run: npx remotion render src/index.ts ${{ env.COMPOSITION_ID }} chunks/${{ matrix.worker_id }}.mp4 --props render-props.json --frames=${{ env.START_FRAME }}-${{ env.END_FRAME }} --muted --codec h264
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: chunk-${{ matrix.worker_id }}
+          path: chunks/${{ matrix.worker_id }}.mp4
+
+  # Step 6: Merge all chunks + audio
+  merge:
+    runs-on: ubuntu-latest
+    needs: [render-chunks, render-audio]
+    steps:
+      - uses: FedericoCarboni/setup-ffmpeg@v3
+
+      - name: Download all chunks
+        uses: actions/download-artifact@v4
+        with:
+          pattern: chunk-*
+          merge-multiple: true
+          path: chunks/
+
+      - name: Download audio
+        uses: actions/download-artifact@v4
+        with:
+          name: audio
+          path: chunks/
+
+      - name: List chunks
+        run: ls -lh chunks/
+
+      - name: Create concat list
+        run: |
+          for f in $(ls chunks/*.mp4 | grep -v audio | sort -t/ -k2 -V); do
+            echo "file '$f'" >> list.txt
+          done
+          cat list.txt
+
+      - name: Merge video + audio
+        env:
+          TRACK_NAME: ${{ inputs.track_name }}
+        run: ffmpeg -f concat -safe 0 -i list.txt -i chunks/audio.mp3 -c copy "$TRACK_NAME.mp4"
+
+      - name: Show final video info
+        env:
+          TRACK_NAME: ${{ inputs.track_name }}
+        run: ffprobe -v error -show_entries format=duration,size -of default=noprint_wrappers=1 "$TRACK_NAME.mp4"
+
+      # Clean up chunk artifacts
+      - uses: geekyeggo/delete-artifact@v5
+        with:
+          name: |
+            chunk-*
+            audio
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ${{ inputs.track_name }}
+          path: "${{ inputs.track_name }}.mp4"
+          retention-days: 7
