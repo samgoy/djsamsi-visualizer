@@ -20,6 +20,12 @@ import { MetatronsCubeLayer } from '../layers/MetatronsCubeLayer';
 import { WaveformRingLayer } from '../layers/WaveformRingLayer';
 import { NebulaLayer } from '../layers/NebulaLayer';
 import { MandalaLayer } from '../layers/MandalaLayer';
+// Immersive + psychedelic layers — Tier 3
+import { FluidFlowLayer } from '../layers/FluidFlowLayer';
+import { StrobePulseLayer } from '../layers/StrobePulseLayer';
+import { ChakraRingsLayer } from '../layers/ChakraRingsLayer';
+import { AuroraLayer } from '../layers/AuroraLayer';
+import { KaleidoscopeLayer } from '../layers/KaleidoscopeLayer';
 
 // Layer registry — maps layer name to component
 const LAYER_REGISTRY: Record<string, React.FC> = {
@@ -38,6 +44,12 @@ const LAYER_REGISTRY: Record<string, React.FC> = {
   WaveformRingLayer,
   NebulaLayer,
   MandalaLayer,
+  // Immersive + psychedelic layers — Tier 3
+  FluidFlowLayer,
+  StrobePulseLayer,
+  ChakraRingsLayer,
+  AuroraLayer,
+  KaleidoscopeLayer,
 };
 
 // Props passed from the engine via Remotion CLI --props
