@@ -16,6 +16,10 @@ import { EyeOfSpiritLayer } from '../layers/EyeOfSpiritLayer';
 import { PhyllotaxisLayer } from '../layers/PhyllotaxisLayer';
 import { FibonacciSpiralLayer } from '../layers/FibonacciSpiralLayer';
 import { MetatronsCubeLayer } from '../layers/MetatronsCubeLayer';
+// Audio-reactive + ambient layers — Tier 2
+import { WaveformRingLayer } from '../layers/WaveformRingLayer';
+import { NebulaLayer } from '../layers/NebulaLayer';
+import { MandalaLayer } from '../layers/MandalaLayer';
 
 // Layer registry — maps layer name to component
 const LAYER_REGISTRY: Record<string, React.FC> = {
@@ -30,6 +34,10 @@ const LAYER_REGISTRY: Record<string, React.FC> = {
   PhyllotaxisLayer,
   FibonacciSpiralLayer,
   MetatronsCubeLayer,
+  // Audio-reactive + ambient layers — Tier 2
+  WaveformRingLayer,
+  NebulaLayer,
+  MandalaLayer,
 };
 
 // Props passed from the engine via Remotion CLI --props
