@@ -26,6 +26,14 @@ import { StrobePulseLayer } from '../layers/StrobePulseLayer';
 import { ChakraRingsLayer } from '../layers/ChakraRingsLayer';
 import { AuroraLayer } from '../layers/AuroraLayer';
 import { KaleidoscopeLayer } from '../layers/KaleidoscopeLayer';
+// Generative art layers — Tier 4
+import { SpectrumBarsLayer } from '../layers/SpectrumBarsLayer';
+import { GridWarpLayer } from '../layers/GridWarpLayer';
+import { ReactionDiffusionLayer } from '../layers/ReactionDiffusionLayer';
+import { LissajousLayer } from '../layers/LissajousLayer';
+import { VoronoiLayer } from '../layers/VoronoiLayer';
+import { RibbonTrailLayer } from '../layers/RibbonTrailLayer';
+import { FractalFlameLayer } from '../layers/FractalFlameLayer';
 
 // Layer registry — maps layer name to component
 const LAYER_REGISTRY: Record<string, React.FC> = {
@@ -50,6 +58,14 @@ const LAYER_REGISTRY: Record<string, React.FC> = {
   ChakraRingsLayer,
   AuroraLayer,
   KaleidoscopeLayer,
+  // Generative art layers — Tier 4
+  SpectrumBarsLayer,
+  GridWarpLayer,
+  ReactionDiffusionLayer,
+  LissajousLayer,
+  VoronoiLayer,
+  RibbonTrailLayer,
+  FractalFlameLayer,
 };
 
 // Props passed from the engine via Remotion CLI --props
@@ -61,6 +77,7 @@ export interface ExperiencePlayerProps {
   backgroundColor?: string;
   seed?: number;
   audioEnvelope?: number[];
+  audioBands?: { bass: number[]; mid: number[]; treble: number[] };
   visualVariant?: {
     hueRotateDeg?: number;
     saturation?: number;
@@ -79,10 +96,11 @@ export const ExperiencePlayer: React.FC<ExperiencePlayerProps> = ({
   backgroundColor = '#1a0a2e',
   seed = 0,
   audioEnvelope = [],
+  audioBands,
   visualVariant = {},
 }) => {
   const frame = useCurrentFrame();
-  const phaseState = useConfigPhase(phases, transitionSec, audioEnvelope);
+  const phaseState = useConfigPhase(phases, transitionSec, audioEnvelope, audioBands);
 
   const hash = (input: string): number => {
     let h = seed || 0;

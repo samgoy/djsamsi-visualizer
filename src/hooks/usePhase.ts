@@ -12,6 +12,9 @@ export interface PhaseState {
   accentColor: string;     // interpolated accent color
   beatPulse: number;       // 0-1, pulses at current BPM (for syncing visuals to beat)
   audioEnergy: number;     // fallback: same as beatPulse in static mode
+  bassEnergy: number;      // 0-1, low frequency energy (20-250Hz)
+  midEnergy: number;       // 0-1, mid frequency energy (250-4000Hz)
+  trebleEnergy: number;    // 0-1, high frequency energy (4000-16000Hz)
 }
 
 function findPhase(timeSec: number): { current: PhaseDefinition; next: PhaseDefinition | null; blendT: number } {
@@ -85,5 +88,8 @@ export function usePhase(): PhaseState {
     accentColor,
     beatPulse,
     audioEnergy: beatPulse,
+    bassEnergy: beatPulse,
+    midEnergy: beatPulse,
+    trebleEnergy: beatPulse,
   };
 }

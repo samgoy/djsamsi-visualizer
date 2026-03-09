@@ -22,6 +22,9 @@ export interface ConfigPhaseState {
   accentColor: string;
   beatPulse: number;
   audioEnergy: number;
+  bassEnergy: number;
+  midEnergy: number;
+  trebleEnergy: number;
 }
 
 function lerp(a: number, b: number, t: number): number {
@@ -63,6 +66,7 @@ export function useConfigPhase(
   phases: PhaseInput[],
   transitionSec: number = 12,
   audioEnvelope: number[] = [],
+  audioBands?: { bass: number[]; mid: number[]; treble: number[] },
 ): ConfigPhaseState {
   const frame = useCurrentFrame();
   const { fps } = useVideoConfig();
@@ -97,6 +101,21 @@ export function useConfigPhase(
   const beatPulse = clamp01(baseBeatPulse * 0.58 + audioEnergy * 0.62);
   const intensity = clamp01(baseIntensity * 0.72 + audioEnergy * 0.45);
 
+  // Frequency band energies (bass/mid/treble)
+  const interpBand = (arr: number[] | undefined): number => {
+    if (!arr || arr.length === 0) return audioEnergy; // fallback to total energy
+    const idx = Math.floor(timeSec);
+    const nextIdx = Math.min(idx + 1, arr.length - 1);
+    const frac = timeSec - idx;
+    const a = arr[Math.max(0, Math.min(idx, arr.length - 1))] || 0;
+    const b = arr[Math.max(0, Math.min(nextIdx, arr.length - 1))] || 0;
+    return clamp01(lerp(a, b, frac));
+  };
+
+  const bassEnergy = interpBand(audioBands?.bass);
+  const midEnergy = interpBand(audioBands?.mid);
+  const trebleEnergy = interpBand(audioBands?.treble);
+
   return {
     phase: blendT > 0.5 && next ? next.id : current.id,
     progress,
@@ -107,5 +126,8 @@ export function useConfigPhase(
     accentColor,
     beatPulse,
     audioEnergy,
+    bassEnergy,
+    midEnergy,
+    trebleEnergy,
   };
 }
