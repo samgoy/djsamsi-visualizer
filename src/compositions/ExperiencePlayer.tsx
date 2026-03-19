@@ -166,6 +166,26 @@ export const ExperiencePlayer: React.FC<ExperiencePlayerProps> = ({
             }}
           />
           {audioFile && <Audio src={staticFile(audioFile)} volume={1} />}
+          {/* Watermark */}
+          <div
+            style={{
+              position: 'absolute',
+              bottom: 32,
+              right: 40,
+              fontFamily: 'Georgia, "Times New Roman", serif',
+              fontSize: 22,
+              fontWeight: 400,
+              color: '#d4a04a',
+              opacity: 0.35,
+              letterSpacing: '4px',
+              textTransform: 'uppercase',
+              textShadow: '0 0 12px rgba(0,0,0,0.9), 0 0 4px rgba(0,0,0,0.6)',
+              pointerEvents: 'none',
+              userSelect: 'none',
+            }}
+          >
+            DJSamsi
+          </div>
         </AbsoluteFill>
       </PhaseContext.Provider>
     </RenderSeedContext.Provider>
