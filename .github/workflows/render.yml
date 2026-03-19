@@ -1,5 +1,5 @@
 name: Render DJSamsi Video
-run-name: "Render: ${{ inputs.track_name }} (${{ inputs.num_workers }} workers)"
+run-name: "Render: ${{ inputs.track_name }} (${{ inputs.num_workers }} workers, ${{ inputs.render_mode }})"
 
 "on":
   workflow_dispatch:
@@ -18,9 +18,14 @@ run-name: "Render: ${{ inputs.track_name }} (${{ inputs.num_workers }} workers)"
         required: true
         type: string
       audio_url:
-        description: "Public URL to WAV audio file (will be downloaded into public/audio/)"
+        description: "Public URL to audio file (for full mode only)"
         required: false
         type: string
+      render_mode:
+        description: "Render mode: 'full' (video+audio) or 'loop' (muted video clip)"
+        required: false
+        type: string
+        default: "full"
 
 env:
   COMPOSITION_ID: ExperiencePlayer
@@ -75,10 +80,11 @@ jobs:
           workers=$(python3 -c "import json; print(json.dumps(list(range(${{ env.NUM_WORKERS }}))))")
           echo "workers=$workers" >> $GITHUB_OUTPUT
 
-  # Step 4: Render audio track separately
+  # Step 4: Render audio track separately (FULL mode only)
   render-audio:
     runs-on: ubuntu-latest
     needs: [setup]
+    if: inputs.render_mode != 'loop'
     steps:
       - uses: actions/checkout@v4
       - name: Restore node modules
@@ -102,7 +108,7 @@ jobs:
 
       - uses: FedericoCarboni/setup-ffmpeg@v3
       - name: Render audio
-        run: npx remotion render src/index.ts ${{ env.COMPOSITION_ID }} chunks/audio.mp3 --props render-props.json
+        run: npx remotion render src/index.ts ExperiencePlayer chunks/audio.mp3 --props render-props.json
 
       - uses: actions/upload-artifact@v4
         with:
@@ -131,12 +137,15 @@ jobs:
         env:
           PROPS_JSON: ${{ inputs.props_json }}
           AUDIO_URL: ${{ inputs.audio_url }}
+          RENDER_MODE: ${{ inputs.render_mode }}
         run: |
           mkdir -p public/audio
-          AUDIO_FILE=$(echo "$PROPS_JSON" | python3 -c "import json,sys; print(json.load(sys.stdin).get('audioFile','audio/track.wav'))")
-          if [ -n "$AUDIO_URL" ]; then
-            curl -L -o "public/$AUDIO_FILE" "$AUDIO_URL"
-            ls -lh "public/$AUDIO_FILE"
+          if [ "$RENDER_MODE" != "loop" ]; then
+            AUDIO_FILE=$(echo "$PROPS_JSON" | python3 -c "import json,sys; print(json.load(sys.stdin).get('audioFile','audio/track.wav'))")
+            if [ -n "$AUDIO_URL" ]; then
+              curl -L -o "public/$AUDIO_FILE" "$AUDIO_URL"
+              ls -lh "public/$AUDIO_FILE"
+            fi
           fi
           echo "$PROPS_JSON" > render-props.json
 
@@ -156,17 +165,18 @@ jobs:
           echo "Rendering frames $START-$END"
 
       - name: Render video chunk (muted)
-        run: npx remotion render src/index.ts ${{ env.COMPOSITION_ID }} chunks/${{ matrix.worker_id }}.mp4 --props render-props.json --frames=${{ env.START_FRAME }}-${{ env.END_FRAME }} --muted --codec h264
+        run: npx remotion render src/index.ts ExperiencePlayer chunks/${{ matrix.worker_id }}.mp4 --props render-props.json --frames=${{ env.START_FRAME }}-${{ env.END_FRAME }} --muted --codec h264
 
       - uses: actions/upload-artifact@v4
         with:
           name: chunk-${{ matrix.worker_id }}
           path: chunks/${{ matrix.worker_id }}.mp4
 
-  # Step 6: Merge all chunks + audio
+  # Step 6: Merge chunks (+ audio in full mode)
   merge:
     runs-on: ubuntu-latest
-    needs: [render-chunks, render-audio]
+    needs: [render-chunks]
+    if: always() && needs.render-chunks.result == 'success'
     steps:
       - uses: FedericoCarboni/setup-ffmpeg@v3
 
@@ -177,7 +187,8 @@ jobs:
           merge-multiple: true
           path: chunks/
 
-      - name: Download audio
+      - name: Download audio (full mode only)
+        if: inputs.render_mode != 'loop'
         uses: actions/download-artifact@v4
         with:
           name: audio
@@ -193,22 +204,29 @@ jobs:
           done
           cat list.txt
 
-      - name: Merge video + audio
+      - name: Merge video + audio (full mode)
+        if: inputs.render_mode != 'loop'
         env:
           TRACK_NAME: ${{ inputs.track_name }}
         run: ffmpeg -f concat -safe 0 -i list.txt -i chunks/audio.mp3 -c copy "$TRACK_NAME.mp4"
+
+      - name: Merge video only (loop mode)
+        if: inputs.render_mode == 'loop'
+        env:
+          TRACK_NAME: ${{ inputs.track_name }}
+        run: ffmpeg -f concat -safe 0 -i list.txt -c copy "$TRACK_NAME.mp4"
 
       - name: Show final video info
         env:
           TRACK_NAME: ${{ inputs.track_name }}
         run: ffprobe -v error -show_entries format=duration,size -of default=noprint_wrappers=1 "$TRACK_NAME.mp4"
 
-      # Clean up chunk artifacts
       - uses: geekyeggo/delete-artifact@v5
         with:
           name: |
             chunk-*
             audio
+          failOnError: false
 
       - uses: actions/upload-artifact@v4
         with:
