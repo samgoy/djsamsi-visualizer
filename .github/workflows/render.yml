@@ -93,18 +93,14 @@ jobs:
           path: node_modules
           key: ${{ runner.os }}-node-${{ hashFiles('package.json') }}
 
-      - name: Download audio and write props
+      - name: Write props
         env:
           PROPS_JSON: ${{ inputs.props_json }}
-          AUDIO_URL: ${{ inputs.audio_url }}
         run: |
-          mkdir -p public/audio
-          AUDIO_FILE=$(echo "$PROPS_JSON" | python3 -c "import json,sys; print(json.load(sys.stdin).get('audioFile','audio/track.wav'))")
-          if [ -n "$AUDIO_URL" ]; then
-            curl -L -o "public/$AUDIO_FILE" "$AUDIO_URL"
-            ls -lh "public/$AUDIO_FILE"
-          fi
           echo "$PROPS_JSON" > render-props.json
+          AUDIO_FILE=$(echo "$PROPS_JSON" | python3 -c "import json,sys; print(json.load(sys.stdin).get('audioFile','audio/track.wav'))")
+          echo "Audio file: public/$AUDIO_FILE"
+          ls -lh "public/$AUDIO_FILE" || echo "Warning: Audio file not found"
 
       - uses: FedericoCarboni/setup-ffmpeg@v3
       - name: Render audio
@@ -133,21 +129,17 @@ jobs:
           path: node_modules
           key: ${{ runner.os }}-node-${{ hashFiles('package.json') }}
 
-      - name: Download audio and write props
+      - name: Write props
         env:
           PROPS_JSON: ${{ inputs.props_json }}
-          AUDIO_URL: ${{ inputs.audio_url }}
           RENDER_MODE: ${{ inputs.render_mode }}
         run: |
-          mkdir -p public/audio
+          echo "$PROPS_JSON" > render-props.json
           if [ "$RENDER_MODE" != "loop" ]; then
             AUDIO_FILE=$(echo "$PROPS_JSON" | python3 -c "import json,sys; print(json.load(sys.stdin).get('audioFile','audio/track.wav'))")
-            if [ -n "$AUDIO_URL" ]; then
-              curl -L -o "public/$AUDIO_FILE" "$AUDIO_URL"
-              ls -lh "public/$AUDIO_FILE"
-            fi
+            echo "Audio file: public/$AUDIO_FILE"
+            ls -lh "public/$AUDIO_FILE" || echo "Warning: Audio file not found"
           fi
-          echo "$PROPS_JSON" > render-props.json
 
       - uses: FedericoCarboni/setup-ffmpeg@v3
 
