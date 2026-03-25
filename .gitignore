@@ -1,4 +1,7 @@
-node_modules/
-out/
-dist/
+node_modules
+dist
+out
 .DS_Store
+.remotion
+public/audio/*.mp3
+public/audio/*.wav
