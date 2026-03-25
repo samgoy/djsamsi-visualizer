@@ -1,6 +1,4 @@
 node_modules/
 out/
 dist/
-public/audio/*.wav
-public/audio/*.mp3
 .DS_Store
