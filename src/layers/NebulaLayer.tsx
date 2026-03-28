@@ -48,7 +48,10 @@ export const NebulaLayer: React.FC = () => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const frame = useCurrentFrame();
   const { width, height, fps } = useVideoConfig();
-  const { intensity, beatPulse, audioEnergy, color, accentColor } = useActivePhase();
+  const phaseState = useActivePhase();
+  const { intensity, beatPulse, audioEnergy, color, accentColor } = phaseState;
+  // Treble → subtle brightness shimmer (background reacts to treble only)
+  const trebleEnergy = 'trebleEnergy' in phaseState ? (phaseState as any).trebleEnergy as number : 0;
   const seed = useRenderSeed();
   const focus = useFocus();
 
@@ -79,9 +82,10 @@ export const NebulaLayer: React.FC = () => {
     const TRAIL_COUNT = 3 + Math.floor(intensity * 3); // 3-6 ghosts
     const TRAIL_STEP = 0.025; // seconds between ghost positions
 
-    // Breathing modulates drift scale
+    // Breathing modulates drift scale — reduced ~8% globally, calmer in stillness phases
     const breatheVal = breathe(timeSec, 12);
-    const driftScale = 40 + breatheVal * 20;
+    const stillnessMotion = intensity < 0.3 ? 0.65 + intensity * 1.2 : 0.92;
+    const driftScale = (37 + breatheVal * 18) * stillnessMotion;
 
     // Sort by depth (back first)
     const sorted = [...particles].sort((a, b) => a.depth - b.depth);
@@ -95,8 +99,11 @@ export const NebulaLayer: React.FC = () => {
       const g = Math.round(cg + (ag - cg) * t);
       const b = Math.round(cb + (ab - cb) * t);
 
-      // Base opacity
-      const baseAlpha = (0.02 + p.depth * 0.06) * (0.5 + intensity * 0.5) + audioEnergy * 0.02;
+      // Base opacity — reduced to support rather than compete with primary layers
+      // Treble adds a tiny brightness shimmer to front-depth particles
+      const trebleShimmer = p.depth > 0.6 ? trebleEnergy * 0.08 : 0;
+      const intensityDim = intensity < 0.5 ? 0.36 : 0.50;
+      const baseAlpha = ((0.02 + p.depth * 0.06) * (0.5 + intensity * 0.5) + audioEnergy * 0.02 + trebleShimmer) * intensityDim;
 
       // Draw ghost trails (oldest first, newest last)
       for (let ghost = TRAIL_COUNT; ghost >= 0; ghost--) {
@@ -109,8 +116,9 @@ export const NebulaLayer: React.FC = () => {
         const x = p.baseX + dx;
         const y = p.baseY + dy;
 
-        // Size breathes with beat
-        const size = p.size * (1 + beatPulse * 0.15 * intensity + audioEnergy * 0.1);
+        // Size breathes with beat; treble adds tiny sparkle to shallow particles
+        const trebleSpark = p.depth > 0.7 ? trebleEnergy * 0.06 : 0;
+        const size = p.size * (1 + beatPulse * 0.15 * intensity + audioEnergy * 0.1 + trebleSpark);
 
         // Ghost alpha decays with distance from current position
         const ghostAlpha = baseAlpha * (1 - ghost / (TRAIL_COUNT + 1));

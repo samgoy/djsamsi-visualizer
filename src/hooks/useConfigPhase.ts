@@ -1,5 +1,6 @@
 import { useCurrentFrame, useVideoConfig } from 'remotion';
 import { lerpColor, generatePalette, getHue } from '../utils/colors';
+import { gaussianSmooth, MAX_ENERGY, PRESENCE_THRESHOLD } from './useSmoothedAudio';
 
 // Phase config passed from the engine via Remotion input props
 export interface PhaseInput {
@@ -91,33 +92,34 @@ export function useConfigPhase(
   const beatPhase = (timeSec * beatFreq * Math.PI * 2) % (Math.PI * 2);
   const baseBeatPulse = (Math.sin(beatPhase) + 1) / 2;
 
-  let audioEnergy = baseBeatPulse;
-  if (audioEnvelope.length > 0) {
-    const idx = Math.floor(timeSec);
-    const nextIdx = Math.min(idx + 1, audioEnvelope.length - 1);
-    const frac = timeSec - idx;
-    const a = audioEnvelope[Math.max(0, Math.min(idx, audioEnvelope.length - 1))] || 0;
-    const b = audioEnvelope[Math.max(0, Math.min(nextIdx, audioEnvelope.length - 1))] || 0;
-    audioEnergy = clamp01(lerp(a, b, frac));
-  }
+  // ─── Smoothed Audio (gaussian-windowed, clamped to 0.7) ───
+  // Uses windowed average instead of raw interpolation to prevent jitter.
+  // When no audio data exists, falls back to BPM-derived pulse.
+  const hasAudio = audioEnvelope.length > 0;
+  const rawAudioEnergy = hasAudio ? gaussianSmooth(audioEnvelope, timeSec) : 0;
 
-  const beatPulse = clamp01(baseBeatPulse * 0.58 + audioEnergy * 0.62);
-  const intensity = clamp01(baseIntensity * 0.72 + audioEnergy * 0.45);
+  // Audio presence: is there meaningful sound right now?
+  const audioPresent = rawAudioEnergy > PRESENCE_THRESHOLD;
 
-  // Frequency band energies (bass/mid/treble)
-  const interpBand = (arr: number[] | undefined): number => {
-    if (!arr || arr.length === 0) return audioEnergy; // fallback to total energy
-    const idx = Math.floor(timeSec);
-    const nextIdx = Math.min(idx + 1, arr.length - 1);
-    const frac = timeSec - idx;
-    const a = arr[Math.max(0, Math.min(idx, arr.length - 1))] || 0;
-    const b = arr[Math.max(0, Math.min(nextIdx, arr.length - 1))] || 0;
-    return clamp01(lerp(a, b, frac));
-  };
+  // Smoothed frequency bands (gaussian-windowed, clamped to MAX_ENERGY=0.7)
+  const bassEnergy = gaussianSmooth(audioBands?.bass ?? [], timeSec);
+  const midEnergy = gaussianSmooth(audioBands?.mid ?? [], timeSec);
+  const trebleEnergy = gaussianSmooth(audioBands?.treble ?? [], timeSec);
 
-  const bassEnergy = interpBand(audioBands?.bass);
-  const midEnergy = interpBand(audioBands?.mid);
-  const trebleEnergy = interpBand(audioBands?.treble);
+  // Stillness damping: reduce audio influence by ~70% when intensity is low
+  const stillnessDamp = baseIntensity < 0.3
+    ? 0.3 + (baseIntensity / 0.3) * 0.7
+    : 1;
+  const audioEnergy = rawAudioEnergy * stillnessDamp;
+
+  // ─── Audio influences only 15-20% of core parameters (BPM stays primary) ───
+  // beatPulse: 85% BPM-driven, 15% audio-enhanced
+  const beatPulse = clamp01(baseBeatPulse * 0.85 + audioEnergy * 0.15);
+  // intensity: 88% phase-driven, 12% audio-modulated
+  const intensity = clamp01(baseIntensity * 0.88 + audioEnergy * 0.12);
+
+  // Fallback: when audio is silent, base motion carries everything
+  const _audioEnergy = audioPresent ? audioEnergy : baseBeatPulse * 0.1;
 
   // Beat hit detection — computable from cycle position alone (no frame-to-frame state)
   const beatCycleFrac = (beatPhase % (Math.PI * 2)) / (Math.PI * 2);
@@ -144,10 +146,10 @@ export function useConfigPhase(
     color,
     accentColor,
     beatPulse,
-    audioEnergy,
-    bassEnergy,
-    midEnergy,
-    trebleEnergy,
+    audioEnergy: _audioEnergy,
+    bassEnergy: bassEnergy * stillnessDamp,
+    midEnergy: midEnergy * stillnessDamp,
+    trebleEnergy: trebleEnergy * stillnessDamp,
     palette,
     isBeatHit,
     beatImpact,

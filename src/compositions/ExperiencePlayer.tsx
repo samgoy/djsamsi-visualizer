@@ -120,16 +120,22 @@ export const ExperiencePlayer: React.FC<ExperiencePlayerProps> = ({
 
   const hueRotateDeg = visualVariant.hueRotateDeg ?? 0;
   const saturation = visualVariant.saturation ?? 1;
-  const contrast = visualVariant.contrast ?? 1;
+  const contrast = (visualVariant.contrast ?? 1) * 1.05; // +5% clarity
   const brightness = visualVariant.brightness ?? 1;
   const cameraDrift = visualVariant.cameraDrift ?? 0.006;
   const vignetteOpacity = visualVariant.vignetteOpacity ?? 0.18;
-  const driftX = Math.sin(frame * 0.002 + seed * 0.01) * (cameraDrift * 100);
-  const driftY = Math.cos(frame * 0.0016 + seed * 0.013) * (cameraDrift * 100);
+  // Camera drift reduced ~10% for calmer baseline motion
+  const driftX = Math.sin(frame * 0.002 + seed * 0.01) * (cameraDrift * 90);
+  const driftY = Math.cos(frame * 0.0016 + seed * 0.013) * (cameraDrift * 90);
 
   // Beat flash: subtle brightness spike + scale pulse on beat impact
-  const beatBrightness = brightness + (phaseState.beatImpact ?? 0) * 0.08;
+  // Treble adds a nearly imperceptible global brightness shimmer
+  const trebleBright = (phaseState.trebleEnergy ?? 0) * 0.025;
+  const beatBrightness = brightness * 0.93 + (phaseState.beatImpact ?? 0) * 0.08 + trebleBright;
   const beatScale = 1 + (phaseState.beatImpact ?? 0) * 0.003;
+
+  // Visual hierarchy: detect if YantraLayer is in the stack (it's the hero)
+  const hasYantra = layers.includes('YantraLayer');
 
   return (
     <RenderSeedContext.Provider value={seed}>
@@ -162,7 +168,11 @@ export const ExperiencePlayer: React.FC<ExperiencePlayerProps> = ({
             const fadeInEnd = fadeInStart + 0.3;
             const breatheOpacity = layerIndex === 0 ? 1
               : Math.max(0, Math.min(1, (phaseState.intensity - fadeInStart) / (fadeInEnd - fadeInStart)));
-            const finalOpacity = baseOpacity * breatheOpacity;
+
+            // Visual hierarchy: YantraLayer gets full opacity, others capped when Yantra is present
+            const isYantra = layerName === 'YantraLayer';
+            const hierarchyCap = hasYantra && !isYantra ? 0.55 : 1;
+            const finalOpacity = Math.min(baseOpacity * breatheOpacity, isYantra ? 1 : hierarchyCap);
 
             return (
               <div
