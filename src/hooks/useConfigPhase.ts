@@ -1,5 +1,5 @@
 import { useCurrentFrame, useVideoConfig } from 'remotion';
-import { lerpColor } from '../utils/colors';
+import { lerpColor, generatePalette, getHue } from '../utils/colors';
 
 // Phase config passed from the engine via Remotion input props
 export interface PhaseInput {
@@ -25,6 +25,9 @@ export interface ConfigPhaseState {
   bassEnergy: number;
   midEnergy: number;
   trebleEnergy: number;
+  palette: string[];     // 3-5 harmonious colors derived from phase color
+  isBeatHit: boolean;    // true on the frame nearest the beat peak
+  beatImpact: number;    // 0-1 decay after beat hit (~6 frame decay)
 }
 
 function lerp(a: number, b: number, t: number): number {
@@ -116,6 +119,22 @@ export function useConfigPhase(
   const midEnergy = interpBand(audioBands?.mid);
   const trebleEnergy = interpBand(audioBands?.treble);
 
+  // Beat hit detection — computable from cycle position alone (no frame-to-frame state)
+  const beatCycleFrac = (beatPhase % (Math.PI * 2)) / (Math.PI * 2);
+  const peakFrac = 0.25; // sine peaks at PI/2 = 25% of cycle
+  const hitWindow = 0.04; // ~1-2 frames at typical BPM
+  const isBeatHit = Math.abs(beatCycleFrac - peakFrac) < hitWindow;
+
+  // Beat impact: fast decay after the peak
+  const distFromPeak = ((beatCycleFrac - peakFrac) + 1) % 1;
+  const decayWindow = 0.12;
+  const beatImpact = distFromPeak < decayWindow
+    ? Math.max(0, 1 - distFromPeak / decayWindow)
+    : 0;
+
+  // Palette: 3-5 harmonious colors from current phase color
+  const palette = generatePalette(getHue(color), 'analogous', 0.65, 0.5);
+
   return {
     phase: blendT > 0.5 && next ? next.id : current.id,
     progress,
@@ -129,5 +148,8 @@ export function useConfigPhase(
     bassEnergy,
     midEnergy,
     trebleEnergy,
+    palette,
+    isBeatHit,
+    beatImpact,
   };
 }

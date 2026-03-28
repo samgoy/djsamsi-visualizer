@@ -34,6 +34,11 @@ import { LissajousLayer } from '../layers/LissajousLayer';
 import { VoronoiLayer } from '../layers/VoronoiLayer';
 import { RibbonTrailLayer } from '../layers/RibbonTrailLayer';
 import { FractalFlameLayer } from '../layers/FractalFlameLayer';
+// Sacred geometry — Tier 5
+import { YantraLayer } from '../layers/YantraLayer';
+
+// Focus system
+import { FocusContext, useComputeFocus } from '../hooks/useFocus';
 
 // Layer registry — maps layer name to component
 const LAYER_REGISTRY: Record<string, React.FC> = {
@@ -66,6 +71,8 @@ const LAYER_REGISTRY: Record<string, React.FC> = {
   VoronoiLayer,
   RibbonTrailLayer,
   FractalFlameLayer,
+  // Sacred geometry — Tier 5
+  YantraLayer,
 };
 
 // Props passed from the engine via Remotion CLI --props
@@ -101,6 +108,7 @@ export const ExperiencePlayer: React.FC<ExperiencePlayerProps> = ({
 }) => {
   const frame = useCurrentFrame();
   const phaseState = useConfigPhase(phases, transitionSec, audioEnvelope, audioBands);
+  const focusState = useComputeFocus(phaseState.intensity);
 
   const hash = (input: string): number => {
     let h = seed || 0;
@@ -119,17 +127,22 @@ export const ExperiencePlayer: React.FC<ExperiencePlayerProps> = ({
   const driftX = Math.sin(frame * 0.002 + seed * 0.01) * (cameraDrift * 100);
   const driftY = Math.cos(frame * 0.0016 + seed * 0.013) * (cameraDrift * 100);
 
+  // Beat flash: subtle brightness spike + scale pulse on beat impact
+  const beatBrightness = brightness + (phaseState.beatImpact ?? 0) * 0.08;
+  const beatScale = 1 + (phaseState.beatImpact ?? 0) * 0.003;
+
   return (
     <RenderSeedContext.Provider value={seed}>
+      <FocusContext.Provider value={focusState}>
       <PhaseContext.Provider value={phaseState}>
         <AbsoluteFill style={{ backgroundColor, overflow: 'hidden' }}>
           <AbsoluteFill
             style={{
-              transform: `translate(${driftX}px, ${driftY}px)`,
-              filter: `hue-rotate(${hueRotateDeg}deg) saturate(${saturation}) contrast(${contrast}) brightness(${brightness})`,
+              transform: `translate(${driftX}px, ${driftY}px) scale(${beatScale})`,
+              filter: `hue-rotate(${hueRotateDeg}deg) saturate(${saturation}) contrast(${contrast}) brightness(${beatBrightness})`,
             }}
           >
-          {layers.map((layerName) => {
+          {layers.map((layerName, layerIndex) => {
             const LayerComponent = LAYER_REGISTRY[layerName];
             if (!LayerComponent) {
               console.warn(`Unknown layer: ${layerName}`);
@@ -137,11 +150,19 @@ export const ExperiencePlayer: React.FC<ExperiencePlayerProps> = ({
             }
 
             const layerHash = hash(layerName);
-            const opacity = 0.76 + (layerHash % 25) / 100;
+            const baseOpacity = 0.76 + (layerHash % 25) / 100;
             const scale = 1 + (layerHash % 5) / 400;
             const rotate = ((layerHash % 11) - 5) * 0.08;
             const modes = ['normal', 'screen', 'overlay', 'soft-light'] as const;
             const mixBlendMode = modes[layerHash % modes.length];
+
+            // Layer breathing: layers fade in based on intensity threshold
+            const layerThreshold = layerIndex / Math.max(1, layers.length - 1);
+            const fadeInStart = layerThreshold * 0.6;
+            const fadeInEnd = fadeInStart + 0.3;
+            const breatheOpacity = layerIndex === 0 ? 1
+              : Math.max(0, Math.min(1, (phaseState.intensity - fadeInStart) / (fadeInEnd - fadeInStart)));
+            const finalOpacity = baseOpacity * breatheOpacity;
 
             return (
               <div
@@ -149,7 +170,7 @@ export const ExperiencePlayer: React.FC<ExperiencePlayerProps> = ({
                 style={{
                   position: 'absolute',
                   inset: 0,
-                  opacity,
+                  opacity: finalOpacity,
                   transform: `scale(${scale}) rotate(${rotate}deg)`,
                   transformOrigin: '50% 50%',
                   mixBlendMode,
@@ -188,6 +209,7 @@ export const ExperiencePlayer: React.FC<ExperiencePlayerProps> = ({
           </div>
         </AbsoluteFill>
       </PhaseContext.Provider>
+      </FocusContext.Provider>
     </RenderSeedContext.Provider>
   );
 };

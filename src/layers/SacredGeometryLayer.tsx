@@ -4,6 +4,7 @@ import { useActivePhase } from '../hooks/phase-context';
 import { flowerOfLifeCircles } from '../utils/geometry';
 import { DJSAMSI } from '../brand';
 import { lerpColor } from '../utils/colors';
+import { breathe as breatheFn } from '../utils/motion';
 
 const RADIUS = 120;
 const circles = flowerOfLifeCircles(RADIUS);
@@ -31,8 +32,9 @@ export const SacredGeometryLayer: React.FC = () => {
   // Color shifts with phase
   const strokeColor = lerpColor(DJSAMSI.twilightPurple, accentColor, intensity);
 
-  // Scale breathing
-  const breathe = 1 + Math.sin(frame * 0.02) * 0.02 * (1 + intensity);
+  // Scale breathing — asymmetric inhale-hold-exhale-hold cycle
+  const breatheValue = breatheFn(frame / fps, 8);
+  const breathe = 1 + breatheValue * 0.04 * (1 + intensity);
 
   // During peak: slight fragmentation (circles offset outward)
   const fragmentAmount = phase === 'peak' ? intensity * 8 : 0;

@@ -55,7 +55,9 @@ export const FractalFlameLayer: React.FC = () => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const frame = useCurrentFrame();
   const { width, height } = useVideoConfig();
-  const { intensity, beatPulse, bassEnergy, trebleEnergy, accentColor } = useActivePhase();
+  const phaseState = useActivePhase();
+  const { intensity, beatPulse, bassEnergy, trebleEnergy, accentColor } = phaseState;
+  const palette: string[] = 'palette' in phaseState ? (phaseState as any).palette : [];
   const seed = useRenderSeed();
 
   useEffect(() => {
@@ -185,10 +187,15 @@ export const FractalFlameLayer: React.FC = () => {
     }
     const logMax = Math.log(maxHit + 1);
 
-    // Render to image
-    const r0 = parseInt(accentColor.slice(1, 3), 16);
-    const g0 = parseInt(accentColor.slice(3, 5), 16);
-    const b0 = parseInt(accentColor.slice(5, 7), 16);
+    // Render to image — palette-driven multi-color flame
+    const parseHex = (hex: string): [number, number, number] => [
+      parseInt(hex.slice(1, 3), 16),
+      parseInt(hex.slice(3, 5), 16),
+      parseInt(hex.slice(5, 7), 16),
+    ];
+
+    const pal = palette.length > 0 ? palette : [accentColor];
+    const palRgb = pal.map(parseHex);
 
     const imgData = ctx.createImageData(bufW, bufH);
     const data = imgData.data;
@@ -200,12 +207,21 @@ export const FractalFlameLayer: React.FC = () => {
       const logDensity = Math.log(hitCount[i] + 1) / logMax;
       const bright = Math.pow(logDensity, 0.4) * (0.5 + intensity * 0.5 + beatPulse * 0.15);
 
-      // Color from palette position
+      // Map colorBuf position to palette — interpolate between adjacent palette entries
       const c = colorBuf[i];
+      const palPos = c * (palRgb.length - 1);
+      const palIdx = Math.min(Math.floor(palPos), palRgb.length - 2);
+      const palFrac = palPos - palIdx;
+      const [r1, g1, b1] = palRgb[palIdx];
+      const [r2, g2, b2] = palRgb[Math.min(palIdx + 1, palRgb.length - 1)];
+      const r0 = r1 + (r2 - r1) * palFrac;
+      const g0 = g1 + (g2 - g1) * palFrac;
+      const b0 = b1 + (b2 - b1) * palFrac;
+
       const px4 = i * 4;
-      data[px4] = Math.min(255, r0 * bright + c * 80 * bright);
+      data[px4] = Math.min(255, r0 * bright);
       data[px4 + 1] = Math.min(255, g0 * bright);
-      data[px4 + 2] = Math.min(255, b0 * bright + (1 - c) * 60 * bright);
+      data[px4 + 2] = Math.min(255, b0 * bright);
       data[px4 + 3] = Math.min(255, bright * 255);
     }
 
@@ -218,7 +234,7 @@ export const FractalFlameLayer: React.FC = () => {
 
     ctx.imageSmoothingEnabled = true;
     ctx.drawImage(tempCanvas, 0, 0, width, height);
-  }, [frame, width, height, intensity, beatPulse, bassEnergy, trebleEnergy, accentColor, seed]);
+  }, [frame, width, height, intensity, beatPulse, bassEnergy, trebleEnergy, accentColor, seed, palette]);
 
   return (
     <AbsoluteFill>

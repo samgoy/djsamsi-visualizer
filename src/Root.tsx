@@ -47,18 +47,19 @@ export const Root: React.FC = () => {
           audioFile: 'audio/full-journey.wav',
         }}
       />
-      {/* Config-driven composition — the engine renders this one */}
+      {/* Config-driven composition — the engine renders this one
+           Cast through unknown required by Remotion v4 generic Composition<Schema, Props> */}
       <Composition
         id="ExperiencePlayer"
-        component={ExperiencePlayer}
+        component={ExperiencePlayer as unknown as React.FC<Record<string, unknown>>}
         durationInFrames={TOTAL_FRAMES}
         fps={FPS}
         width={1920}
         height={1080}
-        defaultProps={defaultExperienceProps}
+        defaultProps={defaultExperienceProps as unknown as Record<string, unknown>}
         calculateMetadata={({ props }) => {
-          // Dynamically set duration from props so any archetype length works
-          const lastPhase = props.phases[props.phases.length - 1];
+          const p = props as unknown as ExperiencePlayerProps;
+          const lastPhase = p.phases[p.phases.length - 1];
           if (lastPhase) {
             const totalSec = lastPhase.end_sec;
             return { durationInFrames: Math.ceil(totalSec * FPS) };
