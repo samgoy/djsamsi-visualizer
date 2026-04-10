@@ -159,7 +159,7 @@ jobs:
           echo "Rendering frames $START-$END"
 
       - name: Render video chunk (muted)
-        run: npx remotion render src/index.ts ExperiencePlayer chunks/${{ matrix.worker_id }}.mp4 --props render-props.json --frames=${{ env.START_FRAME }}-${{ env.END_FRAME }} --muted --codec h264
+        run: npx remotion render src/index.ts ExperiencePlayer chunks/${{ matrix.worker_id }}.mp4 --props render-props.json --frames=${{ env.START_FRAME }}-${{ env.END_FRAME }} --muted --codec h264 --crf 28
 
       - uses: actions/upload-artifact@v4
         with:
