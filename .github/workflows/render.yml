@@ -1,5 +1,5 @@
 name: Render DJSamsi Video
-run-name: "Render: ${{ inputs.track_name }} (${{ inputs.num_workers }} workers, ${{ inputs.render_mode }})"
+run-name: "Render: ${{ inputs.track_name }} (${{ inputs.composition_id || 'ExperiencePlayer' }}, ${{ inputs.num_workers }} workers)"
 
 "on":
   workflow_dispatch:
@@ -26,9 +26,14 @@ run-name: "Render: ${{ inputs.track_name }} (${{ inputs.num_workers }} workers, 
         required: false
         type: string
         default: "full"
+      composition_id:
+        description: "Remotion composition ID (ExperiencePlayer or CodeJourney)"
+        required: false
+        type: string
+        default: "ExperiencePlayer"
 
 env:
-  COMPOSITION_ID: ExperiencePlayer
+  COMPOSITION_ID: ${{ inputs.composition_id || 'ExperiencePlayer' }}
   NUM_WORKERS: ${{ inputs.num_workers }}
 
 jobs:
@@ -105,7 +110,7 @@ jobs:
       - name: Install FFmpeg
         run: sudo apt-get update && sudo apt-get install -y ffmpeg
       - name: Render audio
-        run: npx remotion render src/index.ts ExperiencePlayer chunks/audio.mp3 --props render-props.json
+        run: npx remotion render src/index.ts ${{ env.COMPOSITION_ID }} chunks/audio.mp3 --props render-props.json
 
       - uses: actions/upload-artifact@v4
         with:
@@ -159,7 +164,7 @@ jobs:
           echo "Rendering frames $START-$END"
 
       - name: Render video chunk (muted)
-        run: npx remotion render src/index.ts ExperiencePlayer chunks/${{ matrix.worker_id }}.mp4 --props render-props.json --frames=${{ env.START_FRAME }}-${{ env.END_FRAME }} --muted --codec h264 --crf 28
+        run: npx remotion render src/index.ts ${{ env.COMPOSITION_ID }} chunks/${{ matrix.worker_id }}.mp4 --props render-props.json --frames=${{ env.START_FRAME }}-${{ env.END_FRAME }} --muted --codec h264 --crf 28
 
       - uses: actions/upload-artifact@v4
         with:
